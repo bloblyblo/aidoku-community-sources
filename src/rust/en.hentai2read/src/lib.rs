@@ -54,7 +54,7 @@ fn get_manga_list(filters: Vec<Filter>, page: i32) -> Result<MangaPageResult> {
 						_ => String::from("and"),
 					}
 				}
-				"Ordered By" => {  // Updated sorting filter with exact match from JSON
+				"Sort" => {  // Updated sorting filter with exact match from JSON
 					sort_order = match filter.value.as_string()?.read().as_str() {
 						"Latest" => String::from("last-added"),  // Matches "Latest" from JSON
 						"Popularity" => String::from("popularity"),  // Matches "Popularity" from JSON
