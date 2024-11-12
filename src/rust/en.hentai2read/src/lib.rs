@@ -26,6 +26,7 @@ fn get_manga_list(filters: Vec<Filter>, page: i32) -> Result<MangaPageResult> {
 	let mut artist_name = String::new();
 	let mut status: i64 = 0;
 	let mut tag_search_mode = String::from("and");
+	let mut sort_order = String::new();  // New variable for sorting order
 
 	let mut included_tags: Vec<i64> = Vec::new();
 	let mut excluded_tags: Vec<i64> = Vec::new();
@@ -53,48 +54,74 @@ fn get_manga_list(filters: Vec<Filter>, page: i32) -> Result<MangaPageResult> {
 						_ => String::from("and"),
 					}
 				}
+				"Ordered By" => {  // New sorting filter
+					sort_order = match filter.value.as_int().unwrap_or(-1) {
+						0 => String::from("last-added"),  // "Latest" option
+						_ => String::new(),  // Default or other options as needed
+					};
+				}
 				_ => continue,
 			},
 			_ => continue,
 		}
 	}
 
-	let url = format!("{BASE_URL}/hentai-list/advanced-search/");
+	// Use the appropriate URL based on sorting selection
+	let mut url = if sort_order == "last-added" {
+		format!("{BASE_URL}/hentai-list/all/any/all/{}/{}", sort_order, page)
+	} else {
+		format!("{BASE_URL}/hentai-list/advanced-search/")
+	};
 
-	let body_data = create_advanced_search_body(
-		Some(&manga_title),
-		Some(&artist_name),
-		status,
-		Some(&tag_search_mode),
-		included_tags,
-		excluded_tags,
-	);
+	// Prepare the request body if using advanced search
+	let body_data = if sort_order.is_empty() {
+		Some(create_advanced_search_body(
+			Some(&manga_title),
+			Some(&artist_name),
+			status,
+			Some(&tag_search_mode),
+			included_tags,
+			excluded_tags,
+		))
+	} else {
+		None  // No body data needed for "latest" or similar pre-sorted URLs
+	};
 
 	let mut has_next = false;
 
-	if let Ok(html) = Request::new(url, HttpMethod::Post).body(body_data).html() {
-		let paging = html.select(".pagination");
+	if let Some(body) = body_data {
+		if let Ok(html) = Request::new(url.clone(), HttpMethod::Post).body(body).html() {
+			let paging = html.select(".pagination");
 
-		let mut next_page_url = String::new();
+			let mut next_page_url = String::new();
 
-		if !paging.html().read().is_empty() {
-			let next_page_node = paging.select("a#js-linkNext");
-			if !next_page_node.html().read().is_empty() {
-				next_page_url = next_page_node.attr("href").to_string();
+			if !paging.html().read().is_empty() {
+				let next_page_node = paging.select("a#js-linkNext");
+				if !next_page_node.html().read().is_empty() {
+					next_page_url = next_page_node.attr("href").to_string();
+				}
+
+				if !next_page_url.is_empty() {
+					has_next = true;
+				}
 			}
 
-			if !next_page_url.is_empty() {
-				has_next = true;
-			}
-		}
-
-		if page > 1 {
-			let next_page = change_page(&next_page_url, page);
-			if let Ok(html) = Request::new(next_page, HttpMethod::Get).html() {
+			if page > 1 {
+				let next_page = change_page(&next_page_url, page);
+				if let Ok(html) = Request::new(next_page, HttpMethod::Get).html() {
+					manga_arr = parse_search(&html);
+				}
+			} else {
 				manga_arr = parse_search(&html);
 			}
-		} else {
+		}
+	} else {
+		// Direct "latest" or similar requests
+		if let Ok(html) = Request::new(url.clone(), HttpMethod::Get).html() {
 			manga_arr = parse_search(&html);
+
+			// Check if there's a next page
+			has_next = html.select(".pagination").select("a#js-linkNext").attr("href").is_some();
 		}
 	}
 
