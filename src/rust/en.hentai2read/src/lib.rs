@@ -56,8 +56,10 @@ fn get_manga_list(filters: Vec<Filter>, page: i32) -> Result<MangaPageResult> {
 				}
 				"Sort" => {  // Updated sorting filter with exact match from JSON
 					sort_order = match filter.value.as_string()?.read().as_str() {
-						"Latest" => String::from("last-added"),  // Matches "Latest" from JSON
-						"Popularity" => String::from("popularity"),  // Matches "Popularity" from JSON
+						"Newest" => String::from("last-added"),
+						"Oldest" => String::from("oldest"),
+						"Most Popular" => String::from("most-popular"),
+						"Least Popular" => String::from("least-popular"),
 						_ => String::new(),  // Default or other options as needed
 					};
 				}
