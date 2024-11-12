@@ -54,13 +54,13 @@ fn get_manga_list(filters: Vec<Filter>, page: i32) -> Result<MangaPageResult> {
 						_ => String::from("and"),
 					}
 				}
-				"Sort" => {  // Updated sorting filter with exact match from JSON
+				"Sort" => {  // Updated sorting filter
 					sort_order = match filter.value.as_string()?.read().as_str() {
 						"Newest" => String::from("last-added"),
 						"Oldest" => String::from("oldest"),
 						"Most Popular" => String::from("most-popular"),
 						"Least Popular" => String::from("least-popular"),
-						_ => String::new(),  // Default or other options as needed
+						_ => String::new(),
 					};
 				}
 				_ => continue,
@@ -70,7 +70,7 @@ fn get_manga_list(filters: Vec<Filter>, page: i32) -> Result<MangaPageResult> {
 	}
 
 	// Use the appropriate URL based on sorting selection
-	let mut url = if sort_order == "last-added" {
+	let url = if !sort_order.is_empty() {
 		format!("{BASE_URL}/hentai-list/all/any/all/{}/{}", sort_order, page)
 	} else {
 		format!("{BASE_URL}/hentai-list/advanced-search/")
