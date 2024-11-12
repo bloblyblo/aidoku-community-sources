@@ -14,7 +14,7 @@ use aidoku::{
     Chapter, Filter, FilterType, Manga, MangaPageResult, Page,
 };
 use alloc::string::ToString;
-use helper::{change_page, create_advanced_search_body, genre_id_from_filter, BASE_URL};
+use helper::{change_page, genre_id_from_filter, BASE_URL};
 
 use parser::{parse_chapter_list, parse_manga, parse_page_list, parse_search};
 
@@ -25,7 +25,6 @@ fn get_manga_list(filters: Vec<Filter>, page: i32) -> Result<MangaPageResult> {
     let mut manga_title = String::new();
     let mut artist_name = String::new();
     let mut status: i64 = 0;
-    let mut tag_search_mode = String::from("and");
     let mut sort_order = String::from("last-added"); // Default to "latest"
 
     let mut included_tags: Vec<i64> = Vec::new();
@@ -47,20 +46,13 @@ fn get_manga_list(filters: Vec<Filter>, page: i32) -> Result<MangaPageResult> {
             }
             FilterType::Select => match filter.name.as_str() {
                 "Status" => status = filter.value.as_int()?,
-                "Tag Search Mode" => {
-                    tag_search_mode = match filter.value.as_int().unwrap_or(-1) {
-                        0 => String::from("and"),
-                        1 => String::from("or"),
-                        _ => String::from("and"),
-                    }
-                }
                 "Sort" => {  // Matches JSON "Sort" key
                     sort_order = match filter.value.as_int().unwrap_or(-1) {
                         0 => String::from("last-added"),   // "Newest" option
                         1 => String::from("oldest"),       // "Oldest" option
                         2 => String::from("most-popular"), // "Most Popular" option
                         3 => String::from("least-popular"),// "Least Popular" option
-                        _ => String::from("last-added"),   // Default back to "latest" if unrecognized
+                        _ => String::from("last-added"),   // Default to "latest"
                     };
                 }
                 _ => continue,
@@ -69,63 +61,17 @@ fn get_manga_list(filters: Vec<Filter>, page: i32) -> Result<MangaPageResult> {
         }
     }
 
-    // Determine URL based on the sorting selection or fall back to default "latest"
-    let url = if sort_order == "last-added" {
-        format!("{BASE_URL}/hentai-list/all/{}/{}", sort_order, page)
-    } else {
-        format!("{BASE_URL}/hentai-list/advanced-search/")
-    };
-
-    // Prepare the request body if using advanced search
-    let body_data = if sort_order == "last-added" {
-        None // Direct URL for "latest" or similar pre-sorted URLs, no body data
-    } else {
-        Some(create_advanced_search_body(
-            Some(&manga_title),
-            Some(&artist_name),
-            status,
-            Some(&tag_search_mode),
-            included_tags,
-            excluded_tags,
-        ))
-    };
+    // Construct the URL based on `sort_order` without using advanced search
+    let url = format!("{BASE_URL}/hentai-list/all/any/all/{}/{}", sort_order, page);
 
     let mut has_next = false;
 
-    if let Some(body) = body_data {
-        if let Ok(html) = Request::new(url.clone(), HttpMethod::Post).body(body).html() {
-            let paging = html.select(".pagination");
+    // Direct request for sorted manga list
+    if let Ok(html) = Request::new(url.clone(), HttpMethod::Get).html() {
+        manga_arr = parse_search(&html);
 
-            let mut next_page_url = String::new();
-
-            if !paging.html().read().is_empty() {
-                let next_page_node = paging.select("a#js-linkNext");
-                if !next_page_node.html().read().is_empty() {
-                    next_page_url = next_page_node.attr("href").to_string();
-                }
-
-                if !next_page_url.is_empty() {
-                    has_next = true;
-                }
-            }
-
-            if page > 1 {
-                let next_page = change_page(&next_page_url, page);
-                if let Ok(html) = Request::new(next_page, HttpMethod::Get).html() {
-                    manga_arr = parse_search(&html);
-                }
-            } else {
-                manga_arr = parse_search(&html);
-            }
-        }
-    } else {
-        // Direct "latest" or similar requests
-        if let Ok(html) = Request::new(url.clone(), HttpMethod::Get).html() {
-            manga_arr = parse_search(&html);
-
-            // Check if there's a next page
-            has_next = html.select(".pagination").select("a#js-linkNext").attr("href").is_some();
-        }
+        // Check if there's a next page
+        has_next = html.select(".pagination").select("a#js-linkNext").attr("href").is_some();
     }
 
     Ok(MangaPageResult {
